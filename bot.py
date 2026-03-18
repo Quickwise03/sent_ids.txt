@@ -1,11 +1,12 @@
 from telethon import TelegramClient
 import os
 
-# 🔐 API credentials from GitHub Secrets
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 
-client = TelegramClient('session', api_id, api_hash)
+bot_token = os.getenv("BOT_TOKEN")
+
+client = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
 
 # 📤 SOURCE CHANNELS (add more anytime)
 SOURCE_CHANNELS = [
@@ -40,7 +41,7 @@ def save_ids(ids):
 
 # 🚀 MAIN FUNCTION
 async def main():
-    await client.start()
+    
 
     sent_ids = load_ids()
     new_ids = set(sent_ids)
