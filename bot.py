@@ -1,18 +1,18 @@
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 import os
+import asyncio
 
 # 🔐 Secrets
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
-bot_token = os.getenv("BOT_TOKEN")
+session_string = os.getenv("SESSION_STRING")  # User session, not bot token
 
-# ❌ Stop if token missing
-if not bot_token:
-    raise ValueError("BOT_TOKEN missing. Add in GitHub Secrets.")
+if not session_string:
+    raise ValueError("SESSION_STRING missing. Add in GitHub Secrets.")
 
-# 🤖 Create client
-client = TelegramClient('bot', api_id, api_hash)
-
+# 🤖 Create client using saved user session
+client = TelegramClient(StringSession(session_string), api_id, api_hash)
 
 # 📤 SOURCE CHANNELS
 SOURCE_CHANNELS = [
@@ -29,7 +29,6 @@ SOURCE_CHANNELS = [
 # 📥 DESTINATION CHANNEL
 DEST_CHANNEL = -1003572048499
 
-
 # 📂 Load sent IDs
 def load_ids():
     try:
@@ -38,49 +37,35 @@ def load_ids():
     except:
         return set()
 
-
 # 💾 Save IDs
 def save_ids(ids):
     with open("sent_ids.txt", "w") as f:
         f.write("\n".join(ids))
 
-
 # 🚀 MAIN
 async def main():
-    # ✅ START BOT HERE (IMPORTANT)
-    await client.start(bot_token=bot_token)
-
+    await client.start()
     sent_ids = load_ids()
     new_ids = set(sent_ids)
 
     for channel in SOURCE_CHANNELS:
         try:
             messages = await client.get_messages(channel, limit=10)
-
             for msg in messages:
                 if not msg.text:
                     continue
-
                 msg_id = f"{channel}_{msg.id}"
-
                 if msg_id in sent_ids:
                     continue
-
                 text = msg.text.lower()
-
                 if "job" in text or "hiring" in text or "vacancy" in text:
                     print("Sending:", msg.text[:50])
-
                     await client.send_message(DEST_CHANNEL, msg.text)
-
                     new_ids.add(msg_id)
-
         except Exception as e:
             print(f"Error in channel {channel}:", e)
 
     save_ids(new_ids)
 
-
-# ▶️ RUN
 with client:
     client.loop.run_until_complete(main())
