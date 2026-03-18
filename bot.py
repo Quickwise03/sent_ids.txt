@@ -6,8 +6,18 @@ api_hash = os.getenv("API_HASH")
 
 client = TelegramClient('session', api_id, api_hash)
 
-SOURCE_CHANNEL = 'channelusername1'   # change later
-DEST_CHANNEL = 'QuickwiseJobs'
+SOURCE_CHANNELS = [
+    -1001160330973,
+    -1001256565029,
+    -1001603220106,
+    -1002594747501,
+    -1001286809069,
+    -1002049500142,
+    -1001538889184,
+    -1001433351995
+]
+
+DEST_CHANNEL = -1003572048499
 
 def load_ids():
     try:
@@ -26,7 +36,21 @@ async def main():
     sent_ids = load_ids()
     new_ids = set(sent_ids)
 
-    messages = await client.get_messages(SOURCE_CHANNEL, limit=10)
+    for channel in SOURCE_CHANNELS:
+    messages = await client.get_messages(channel, limit=10)
+
+    for msg in messages:
+        if not msg.text:
+            continue
+
+        msg_id = str(msg.id)
+
+        if msg_id in sent_ids:
+            continue
+
+        if "job" in msg.text.lower():
+            await client.send_message(DEST_CHANNEL, msg.text)
+            new_ids.add(msg_id)
 
     for msg in messages:
         if not msg.text:
