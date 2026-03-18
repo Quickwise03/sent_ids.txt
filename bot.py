@@ -1,11 +1,13 @@
 from telethon import TelegramClient
 import os
 
+# 🔐 API credentials from GitHub Secrets
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 
 client = TelegramClient('session', api_id, api_hash)
 
+# 📤 SOURCE CHANNELS (add more anytime)
 SOURCE_CHANNELS = [
     -1001160330973,
     -1001256565029,
@@ -17,8 +19,11 @@ SOURCE_CHANNELS = [
     -1001433351995
 ]
 
+# 📥 YOUR CHANNEL
 DEST_CHANNEL = -1003572048499
 
+
+# 📂 Load already sent message IDs
 def load_ids():
     try:
         with open("sent_ids.txt", "r") as f:
@@ -26,10 +31,14 @@ def load_ids():
     except:
         return set()
 
+
+# 💾 Save sent message IDs
 def save_ids(ids):
     with open("sent_ids.txt", "w") as f:
         f.write("\n".join(ids))
 
+
+# 🚀 MAIN FUNCTION
 async def main():
     await client.start()
 
@@ -37,37 +46,37 @@ async def main():
     new_ids = set(sent_ids)
 
     for channel in SOURCE_CHANNELS:
-    messages = await client.get_messages(channel, limit=10)
+        try:
+            messages = await client.get_messages(channel, limit=10)
 
-    for msg in messages:
-        if not msg.text:
-            continue
+            for msg in messages:
+                if not msg.text:
+                    continue
 
-        msg_id = str(msg.id)
+                msg_id = f"{channel}_{msg.id}"   # 🔥 unique per channel
 
-        if msg_id in sent_ids:
-            continue
+                # ❌ Skip duplicates
+                if msg_id in sent_ids:
+                    continue
 
-        if "job" in msg.text.lower():
-            await client.send_message(DEST_CHANNEL, msg.text)
-            new_ids.add(msg_id)
+                text = msg.text.lower()
 
-    for msg in messages:
-        if not msg.text:
-            continue
+                # 🔥 Basic job filter
+                if "job" in text or "hiring" in text or "vacancy" in text:
+                    print("Sending:", msg.text[:50])
 
-        msg_id = str(msg.id)
+                    await client.send_message(DEST_CHANNEL, msg.text)
 
-        if msg_id in sent_ids:
-            continue
+                    new_ids.add(msg_id)
 
-        if "job" in msg.text.lower():
-            await client.send_message(DEST_CHANNEL, msg.text)
-            new_ids.add(msg_id)
+        except Exception as e:
+            print(f"Error in channel {channel}:", e)
 
     save_ids(new_ids)
 
     await client.disconnect()
 
+
+# ▶️ RUN
 with client:
     client.loop.run_until_complete(main())
