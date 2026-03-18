@@ -6,11 +6,12 @@ api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 bot_token = os.getenv("BOT_TOKEN")
 
-# 🤖 Create bot client
-client = TelegramClient('bot', api_id, api_hash)
+# ❌ Stop if token missing
+if not bot_token:
+    raise ValueError("BOT_TOKEN missing. Add in GitHub Secrets.")
 
-# 🚀 Start bot ONLY ONCE
-client = client.start(bot_token=bot_token)
+# 🤖 Create client
+client = TelegramClient('bot', api_id, api_hash)
 
 
 # 📤 SOURCE CHANNELS
@@ -29,6 +30,7 @@ SOURCE_CHANNELS = [
 DEST_CHANNEL = -1003572048499
 
 
+# 📂 Load sent IDs
 def load_ids():
     try:
         with open("sent_ids.txt", "r") as f:
@@ -37,12 +39,17 @@ def load_ids():
         return set()
 
 
+# 💾 Save IDs
 def save_ids(ids):
     with open("sent_ids.txt", "w") as f:
         f.write("\n".join(ids))
 
 
+# 🚀 MAIN
 async def main():
+    # ✅ START BOT HERE (IMPORTANT)
+    await client.start(bot_token=bot_token)
+
     sent_ids = load_ids()
     new_ids = set(sent_ids)
 
@@ -63,7 +70,9 @@ async def main():
 
                 if "job" in text or "hiring" in text or "vacancy" in text:
                     print("Sending:", msg.text[:50])
+
                     await client.send_message(DEST_CHANNEL, msg.text)
+
                     new_ids.add(msg_id)
 
         except Exception as e:
@@ -72,5 +81,6 @@ async def main():
     save_ids(new_ids)
 
 
+# ▶️ RUN
 with client:
     client.loop.run_until_complete(main())
