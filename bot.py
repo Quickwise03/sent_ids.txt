@@ -45,8 +45,8 @@ def save_ids(ids):
 # 🚀 MAIN
 async def main():
     await client.start()
-    await client.get_dialogs()
     sent_ids = load_ids()
+    new_ids = set(sent_ids)
 
     for channel in SOURCE_CHANNELS:
         try:
