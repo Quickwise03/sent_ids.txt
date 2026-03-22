@@ -232,6 +232,10 @@ def extract_fields(text):
         l = line.lower().strip()
         clean = re.sub(r'[*_]', '', line).strip()
         value = clean.split(":", 1)[-1].strip() if ":" in clean else ""
+        if value.startswith("http") or value.startswith("//"):
+            continue
+        if not value or len(value) < 2:
+            continue
 
         if not company:
             if any(w in l for w in ["company", "organisation", "organization", "employer"]):
