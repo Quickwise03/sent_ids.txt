@@ -20,8 +20,10 @@ jobs:
       - run: |
           git config --global user.name "bot"
           git config --global user.email "bot@users.noreply.github.com"
-          git checkout -- .
-          git pull origin main
           git add sent_ids.txt
-          git commit -m "update ids" || echo "no change"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git diff --staged --quiet || git commit -m "update ids"
+          git fetch origin main
+          git reset --soft origin/main
+          git add sent_ids.txt
+          git diff --staged --quiet || git commit -m "update ids"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main --force
