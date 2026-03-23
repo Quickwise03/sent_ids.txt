@@ -24,7 +24,6 @@ SOURCE_CHANNELS = [
     -1002049500142,
     -1001538889184,
     -1001433351995
-
 ]
 
 DEST_CHANNEL = -1003572048499
@@ -47,10 +46,6 @@ BEST_DOMAINS = [
     "lever.co",
     "workday.com",
     "myworkdayjobs.com",
-    "careers.", "career.",
-    "jobs.",
-    "hire.",
-    "apply.",
     "smartrecruiters.com",
     "icims.com",
     "taleo.net",
@@ -61,18 +56,30 @@ BEST_DOMAINS = [
 
 GOOD_DOMAINS = [
     "linkedin.com/jobs",
-    "naukri.com/job",
-    "indeed.com/viewjob",
-    "glassdoor.com/job"
+    "naukri.com",
+    "indeed.com",
+    "glassdoor.com",
+    "instahyre.com",
+    "internshala.com",
+    "shine.com",
+    "monster.com",
+    "hirist.com",
+    "foundit.in"
 ]
 
 # ── BAD LINK PATTERNS ─────────────────────────────────
 BAD_LINK_PATTERNS = [
-    "registration", "signup", "sign-up",
-    "login", "log-in", "referral",
-    "register", "telegram", "whatsapp",
-    "youtube", "instagram", "share",
-    "subscribe", "follow"
+    "t.me/",
+    "telegram.me/",
+    "chat.whatsapp.com",
+    "wa.me/",
+    "youtube.com",
+    "youtu.be",
+    "instagram.com",
+    "facebook.com",
+    "twitter.com",
+    "x.com/",
+    "play.google.com"
 ]
 
 # ── JOB KEYWORDS ─────────────────────────────────────
@@ -173,7 +180,6 @@ def get_best_apply_link(url, depth=0, max_depth=2):
             return final_url
 
         soup = BeautifulSoup(r.text, "html.parser")
-
         best_link = None
         candidate_link = None
 
@@ -190,15 +196,15 @@ def get_best_apply_link(url, depth=0, max_depth=2):
                 continue
 
             # Priority 1 — Best domain
-            if is_best_domain(href) and not is_bad_link(href):
+            if is_best_domain(href):
                 return href
 
             # Priority 2 — Good domain
-            if is_good_domain(href) and not is_bad_link(href):
+            if is_good_domain(href):
                 if not best_link:
                     best_link = href
 
-            # Priority 3 — Apply keyword
+            # Priority 3 — Apply keyword in link or text
             if any(kw in href_lower or kw in anchor_text for kw in ["apply", "careers", "job", "position", "opening", "hiring"]):
                 if not best_link:
                     best_link = href
@@ -232,6 +238,7 @@ def extract_fields(text):
         l = line.lower().strip()
         clean = re.sub(r'[*_]', '', line).strip()
         value = clean.split(":", 1)[-1].strip() if ":" in clean else ""
+
         if value.startswith("http") or value.startswith("//"):
             continue
         if not value or len(value) < 2:
@@ -281,7 +288,6 @@ def format_message(cleaned_text, apply_link):
     if last_date:
         msg += f"⏳ *Last Date:* {last_date}\n"
 
-    # No fields found — use full cleaned text
     if not any([company, role, location, salary, last_date]):
         msg += cleaned_text + "\n"
 
@@ -316,20 +322,20 @@ def process_message(text):
     # Step 5 — Find best apply link
     final_link = None
 
-    # Check if already a best domain link
+    # Priority 1 — Already a best domain link in message
     for url in valid_urls:
-        if is_best_domain(url) and not is_bad_link(url):
+        if is_best_domain(url):
             final_link = url
             break
 
-    # Check good domain
+    # Priority 2 — Good domain link in message
     if not final_link:
         for url in valid_urls:
-            if is_good_domain(url) and not is_bad_link(url):
+            if is_good_domain(url):
                 final_link = url
                 break
 
-    # Deep extraction
+    # Priority 3 — Deep extraction from blog/redirect links
     if not final_link:
         for url in valid_urls:
             deeper = get_best_apply_link(url, depth=0, max_depth=2)
@@ -337,13 +343,11 @@ def process_message(text):
                 final_link = deeper
                 break
 
-    # Fallback to first valid URL
-    if not final_link and valid_urls:
-        final_link = valid_urls[0]
-
-    # No link at all — send cleaned text only
+    # ✅ No direct apply link found — SKIP message entirely
+    # Never show blog or redirect links
     if not final_link:
-        return cleaned
+        print("Skipped: no direct apply link found")
+        return None
 
     # Step 6 — Format and return
     return format_message(cleaned, final_link)
@@ -372,7 +376,6 @@ async def main():
                 await client.send_message(DEST_CHANNEL, result, parse_mode="md")
                 new_ids.add(msg_id)
 
-                # Small delay to avoid flood
                 await asyncio.sleep(1)
 
         except Exception as e:
@@ -383,3 +386,4 @@ async def main():
 with client:
     client.start()
     asyncio.get_event_loop().run_until_complete(main())
+    
