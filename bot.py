@@ -108,6 +108,8 @@ BAD_LINK_PATTERNS = [
     "twitter.com",
     "x.com/",
     "play.google.com"
+    "addtoany.com",
+    "sharethis.com",
 ]
 
 # ── JOB KEYWORDS ─────────────────────────────────────
@@ -248,9 +250,13 @@ def scrape_apply_link_from_blog(url):
 
         return None
 
+    # No external link found — return blog page itself
+        # (walk-in jobs have no online apply link)
+        return url
+
     except Exception as e:
         print(f"Blog scrape error: {e}")
-        return None
+        return url
 
 # ── EXTRACT JOB FIELDS FROM TEXT ─────────────────────
 def extract_fields(text):
