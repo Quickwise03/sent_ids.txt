@@ -23,12 +23,13 @@ SOURCE_CHANNELS = [
     -1002594747501,
     -1001286809069,
     -1002049500142,
-    -1001433351995 
+    -1001433351995,
+    -1001510857881,
+    -1001538889184
 ]
 
 DEST_CHANNEL = -1003572048499
 
-# ── SKIP DOMAINS — completely ignore these ─────────────
 SKIP_DOMAINS = [
     "youtube.com", "youtu.be",
     "t.me", "telegram.me", "telegram.dog",
@@ -38,10 +39,11 @@ SKIP_DOMAINS = [
     "twitter.com", "x.com",
     "play.google.com",
     "docs.google.com",
-    "linktr.ee"
+    "linktr.ee",
+    "addtoany.com",
+    "sharethis.com"
 ]
 
-# ── BEST ATS DOMAINS — direct apply, use immediately ──
 BEST_DOMAINS = [
     "greenhouse.io",
     "lever.co",
@@ -58,7 +60,6 @@ BEST_DOMAINS = [
     "darwinbox.com"
 ]
 
-# ── GOOD JOB PORTALS — use directly ───────────────────
 GOOD_DOMAINS = [
     "linkedin.com/jobs",
     "linkedin.com/job",
@@ -76,7 +77,6 @@ GOOD_DOMAINS = [
     "unstop.com"
 ]
 
-# ── JOB BLOG SITES — go inside and find real apply link
 JOB_BLOGS = [
     "vacancyquick.com",
     "foundthejob.com",
@@ -88,13 +88,20 @@ JOB_BLOGS = [
     "rojgarresult.com",
     "freshersworld.com",
     "freshersnow.com",
+    "freshersrecruitment.co.in",
+    "freshershunt.in",
     "letsdojob.in",
     "careesma.in",
     "jobsarkari.com",
-    "govtjobguru.in"
+    "govtjobguru.in",
+    "recruitment.guru",
+    "hiringalert.in",
+    "jobnotification.in",
+    "careerwill.com",
+    "rojgaralert.com",
+    "sarkariwallahjob.com"
 ]
 
-# ── BAD LINK PATTERNS ─────────────────────────────────
 BAD_LINK_PATTERNS = [
     "t.me/",
     "telegram.me/",
@@ -108,12 +115,11 @@ BAD_LINK_PATTERNS = [
     "facebook.com",
     "twitter.com",
     "x.com/",
-    "play.google.com"
+    "play.google.com",
     "addtoany.com",
-    "sharethis.com",
+    "sharethis.com"
 ]
 
-# ── JOB KEYWORDS ─────────────────────────────────────
 JOB_KEYWORDS = [
     "apply", "hiring", "vacancy", "vacancies", "opening",
     "recruit", "opportunity", "fresher", "experience",
@@ -123,7 +129,6 @@ JOB_KEYWORDS = [
     "job", "careers", "qualification", "batch", "skills"
 ]
 
-# ── PROMO LINES TO REMOVE ─────────────────────────────
 PROMO_LINES = [
     "join telegram", "join our telegram", "join whatsapp",
     "join our whatsapp", "share with friends", "share this",
@@ -137,7 +142,7 @@ PROMO_LINES = [
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-# ── LOAD / SAVE SENT IDS ──────────────────────────────
+
 def load_ids():
     try:
         with open("sent_ids.txt", "r") as f:
@@ -145,40 +150,46 @@ def load_ids():
     except:
         return set()
 
+
 def save_ids(ids):
     with open("sent_ids.txt", "w") as f:
         f.write("\n".join(ids))
 
-# ── EXTRACT ALL URLS FROM TEXT ────────────────────────
+
 def extract_urls(text):
     return re.findall(r'https?://[^\s\)\]\,\"\']+', text)
 
-# ── CHECKS ────────────────────────────────────────────
+
 def is_skip_url(url):
     url_lower = url.lower()
     return any(domain in url_lower for domain in SKIP_DOMAINS)
+
 
 def is_bad_link(url):
     url_lower = url.lower()
     return any(bad in url_lower for bad in BAD_LINK_PATTERNS)
 
+
 def is_best_domain(url):
     url_lower = url.lower()
     return any(domain in url_lower for domain in BEST_DOMAINS)
+
 
 def is_good_domain(url):
     url_lower = url.lower()
     return any(domain in url_lower for domain in GOOD_DOMAINS)
 
+
 def is_job_blog(url):
     url_lower = url.lower()
     return any(blog in url_lower for blog in JOB_BLOGS)
+
 
 def is_job_message(text):
     text_lower = text.lower()
     return any(kw in text_lower for kw in JOB_KEYWORDS)
 
-# ── CLEAN PROMO LINES FROM TEXT ───────────────────────
+
 def clean_text(text):
     lines = text.split("\n")
     cleaned = []
@@ -194,12 +205,12 @@ def clean_text(text):
     result = re.sub(r'\n{3,}', '\n\n', result)
     return result.strip()
 
-# ── SCRAPE APPLY LINK FROM A JOB BLOG PAGE ───────────
+
 def scrape_apply_link_from_blog(url):
     try:
         r = requests.get(url, timeout=8, headers=HEADERS, allow_redirects=True)
         if not r.ok:
-            return None
+            return url
 
         final_url = r.url
         if is_best_domain(final_url):
@@ -209,7 +220,7 @@ def scrape_apply_link_from_blog(url):
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Priority 1 — ATS or portal links on the page
+        # Priority 1 — ATS or portal links
         for a in soup.find_all("a", href=True):
             href = a["href"]
             if not href.startswith("http"):
@@ -221,7 +232,7 @@ def scrape_apply_link_from_blog(url):
             if is_good_domain(href):
                 return href
 
-        # Priority 2 — Apply button by anchor text
+        # Priority 2 — Apply button text
         for a in soup.find_all("a", href=True):
             href = a["href"]
             text = a.get_text().lower().strip()
@@ -235,7 +246,7 @@ def scrape_apply_link_from_blog(url):
                 return href
 
         # Priority 3 — Any external non-blog link
-        blog_domain = re.search(r'https?://([^/]+)', url)
+        blog_domain_match = re.search(r'https?://([^/]+)', url)
         for a in soup.find_all("a", href=True):
             href = a["href"]
             if not href.startswith("http"):
@@ -244,22 +255,19 @@ def scrape_apply_link_from_blog(url):
                 continue
             if is_job_blog(href):
                 continue
-            link_domain = re.search(r'https?://([^/]+)', href)
-            if blog_domain and link_domain:
-                if blog_domain.group(1) != link_domain.group(1):
+            link_domain_match = re.search(r'https?://([^/]+)', href)
+            if blog_domain_match and link_domain_match:
+                if blog_domain_match.group(1) != link_domain_match.group(1):
                     return href
 
-        return None
-
-    # No external link found — return blog page itself
-        # (walk-in jobs have no online apply link)
+        # No external link — return blog page itself (walk-in jobs)
         return url
 
     except Exception as e:
         print(f"Blog scrape error: {e}")
         return url
 
-# ── EXTRACT JOB FIELDS FROM TEXT ─────────────────────
+
 def extract_fields(text):
     lines = text.split("\n")
     company = role = location = salary = last_date = ""
@@ -302,7 +310,7 @@ def extract_fields(text):
 
     return company, role, location, salary, last_date
 
-# ── FORMAT FINAL MESSAGE ──────────────────────────────
+
 def format_message(cleaned_text, apply_link):
     company, role, location, salary, last_date = extract_fields(cleaned_text)
 
@@ -327,7 +335,7 @@ def format_message(cleaned_text, apply_link):
 
     return msg.strip()
 
-# ── PROCESS ONE MESSAGE ───────────────────────────────
+
 def process_message(text):
     if not is_job_message(text):
         print("Skipped: not a job message")
@@ -346,22 +354,19 @@ def process_message(text):
 
     final_link = None
 
-    # Priority 1 — Best ATS domain in message
     for url in valid_urls:
         if is_best_domain(url):
             final_link = url
-            print(f"Best domain found: {url}")
+            print(f"Best domain: {url}")
             break
 
-    # Priority 2 — Good job portal in message
     if not final_link:
         for url in valid_urls:
             if is_good_domain(url):
                 final_link = url
-                print(f"Good domain found: {url}")
+                print(f"Good domain: {url}")
                 break
 
-    # Priority 3 — Scrape job blog to find real apply link
     if not final_link:
         for url in valid_urls:
             if is_job_blog(url):
@@ -369,38 +374,36 @@ def process_message(text):
                 scraped = scrape_apply_link_from_blog(url)
                 if scraped:
                     final_link = scraped
-                    print(f"Scraped link: {scraped}")
+                    print(f"Scraped: {scraped}")
                     break
 
-    # Priority 4 — Try scraping any other valid URL
     if not final_link:
         for url in valid_urls:
             scraped = scrape_apply_link_from_blog(url)
-            if scraped and (is_best_domain(scraped) or is_good_domain(scraped)):
+            if scraped:
                 final_link = scraped
                 break
 
-    # No direct apply link found — skip completely
     if not final_link:
-        print("Skipped: no direct apply link found")
+        print("Skipped: no apply link found")
         return None
 
     return format_message(cleaned, final_link)
 
-# ── MAIN ──────────────────────────────────────────────
+
 async def main():
     sent_ids = load_ids()
     new_ids = set(sent_ids)
 
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+
     for channel in SOURCE_CHANNELS:
         try:
-            from datetime import datetime, timezone, timedelta
+            messages = await client.get_messages(channel, limit=100)
+            recent = [m for m in messages if m.date and m.date.replace(tzinfo=timezone.utc) >= since]
+            print(f"Channel {channel}: {len(recent)} recent messages")
 
-# Only fetch messages from last 24 hours
-since = datetime.now(timezone.utc) - timedelta(hours=24) 
-messages = await client.get_messages(channel, limit=100, offset_date=None)
-messages = [m for m in messages if m.date and m.date.replace(tzinfo=timezone.utc) >= since]
-            for msg in messages:
+            for msg in recent:
                 if not msg.text:
                     continue
                 msg_id = f"{channel}_{msg.id}"
@@ -415,13 +418,13 @@ messages = [m for m in messages if m.date and m.date.replace(tzinfo=timezone.utc
                 print("Sending:", result[:60])
                 await client.send_message(DEST_CHANNEL, result, parse_mode="md")
                 new_ids.add(msg_id)
-
                 await asyncio.sleep(1)
 
         except Exception as e:
             print(f"Error in channel {channel}: {e}")
 
     save_ids(new_ids)
+
 
 with client:
     client.start()
