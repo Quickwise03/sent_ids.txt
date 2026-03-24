@@ -352,44 +352,36 @@ def process_message(text):
     if not cleaned:
         return None
 
-    final_link = None
+    # ✅ Collect ALL links — one per job
+    final_links = []
 
     for url in valid_urls:
         if is_best_domain(url):
-            final_link = url
-            print(f"Best domain: {url}")
-            break
-
-    if not final_link:
-        for url in valid_urls:
-            if is_good_domain(url):
-                final_link = url
-                print(f"Good domain: {url}")
-                break
-
-    if not final_link:
-        for url in valid_urls:
-            if is_job_blog(url):
-                print(f"Scraping blog: {url}")
-                scraped = scrape_apply_link_from_blog(url)
-                if scraped:
-                    final_link = scraped
-                    print(f"Scraped: {scraped}")
-                    break
-
-    if not final_link:
-        for url in valid_urls:
+            final_links.append(url)
+        elif is_good_domain(url):
+            final_links.append(url)
+        elif is_job_blog(url):
             scraped = scrape_apply_link_from_blog(url)
             if scraped:
-                final_link = scraped
-                break
+                final_links.append(scraped)
+        else:
+            scraped = scrape_apply_link_from_blog(url)
+            if scraped:
+                final_links.append(scraped)
 
-    if not final_link:
+    if not final_links:
         print("Skipped: no apply link found")
         return None
 
-    return format_message(cleaned, final_link)
+    # ✅ If only one link — return single message
+    if len(final_links) == 1:
+        return format_message(cleaned, final_links[0])
 
+    # ✅ If multiple links — return list of messages
+    messages = []
+    for link in final_links:
+        messages.append(format_message(cleaned, link))
+    return messages
 
 async def main():
     sent_ids = load_ids()
@@ -410,13 +402,21 @@ async def main():
                 if msg_id in sent_ids:
                     continue
 
-                result = process_message(msg.text)
+               result = process_message(msg.text)
                 if not result:
                     new_ids.add(msg_id)
                     continue
 
-                print("Sending:", result[:60])
-                await client.send_message(DEST_CHANNEL, result, parse_mode="md")
+                # ✅ Handle both single and multiple messages
+                if isinstance(result, list):
+                    for r in result:
+                        print("Sending:", r[:60])
+                        await client.send_message(DEST_CHANNEL, r, parse_mode="md")
+                        await asyncio.sleep(1)
+                else:
+                    print("Sending:", result[:60])
+                    await client.send_message(DEST_CHANNEL, result, parse_mode="md")
+
                 new_ids.add(msg_id)
                 await asyncio.sleep(1)
 
