@@ -221,7 +221,6 @@ def scrape_apply_link_from_blog(url):
 
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # Priority 1 — ATS or portal links
         for a in soup.find_all("a", href=True):
             href = a["href"]
             if not href.startswith("http"):
@@ -233,7 +232,6 @@ def scrape_apply_link_from_blog(url):
             if is_good_domain(href):
                 return href
 
-        # Priority 2 — Apply button text
         for a in soup.find_all("a", href=True):
             href = a["href"]
             text = a.get_text().lower().strip()
@@ -246,7 +244,6 @@ def scrape_apply_link_from_blog(url):
             if any(kw in text for kw in ["apply now", "apply here", "apply online", "click here to apply", "official link", "apply link", "official website"]):
                 return href
 
-        # Priority 3 — Any external non-blog link
         blog_domain_match = re.search(r'https?://([^/]+)', url)
         for a in soup.find_all("a", href=True):
             href = a["href"]
@@ -261,7 +258,6 @@ def scrape_apply_link_from_blog(url):
                 if blog_domain_match.group(1) != link_domain_match.group(1):
                     return href
 
-        # No external link — return blog page itself (walk-in jobs)
         return url
 
     except Exception as e:
@@ -353,9 +349,8 @@ def process_message(text):
     if not cleaned:
         return None
 
-    # ✅ Collect ALL links — one per job
+    # Collect ALL links — one per job
     final_links = []
-
     for url in valid_urls:
         if is_best_domain(url):
             final_links.append(url)
@@ -374,15 +369,16 @@ def process_message(text):
         print("Skipped: no apply link found")
         return None
 
-    # ✅ If only one link — return single message
+    # Single link — return one message
     if len(final_links) == 1:
         return format_message(cleaned, final_links[0])
 
-    # ✅ If multiple links — return list of messages
+    # Multiple links — return list of messages
     messages = []
     for link in final_links:
         messages.append(format_message(cleaned, link))
     return messages
+
 
 async def main():
     sent_ids = load_ids()
@@ -403,12 +399,12 @@ async def main():
                 if msg_id in sent_ids:
                     continue
 
-               result = process_message(msg.text)
+                result = process_message(msg.text)
                 if not result:
                     new_ids.add(msg_id)
                     continue
 
-                # ✅ Handle both single and multiple messages
+                # Handle both single and multiple messages
                 if isinstance(result, list):
                     for r in result:
                         print("Sending:", r[:60])
