@@ -397,7 +397,7 @@ async def main():
             from datetime import datetime, timezone, timedelta
 
 # Only fetch messages from last 24 hours
-since = datetime.now(timezone.utc) - timedelta(hours=24)
+since = datetime.now(timezone.utc) - timedelta(hours=24) 
 messages = await client.get_messages(channel, limit=100, offset_date=None)
 messages = [m for m in messages if m.date and m.date.replace(tzinfo=timezone.utc) >= since]
             for msg in messages:
