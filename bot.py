@@ -63,13 +63,11 @@ BEST_DOMAINS = [
 GOOD_DOMAINS = [
     "linkedin.com/jobs",
     "linkedin.com/job",
-    "naukri.com",
+    "naukri.com/job-listings",
     "indeed.com",
-    "glassdoor.com",
-    "instahyre.com",
     "internshala.com",
+    "instahyre.com",
     "shine.com",
-    "monster.com",
     "hirist.com",
     "foundit.in",
     "wellfound.com",
@@ -78,6 +76,9 @@ GOOD_DOMAINS = [
 ]
 
 JOB_BLOGS = [
+    # Aggregator/blog sites — scrape for direct link
+    "fresheroffcampus.com",
+    "fresheroffcampus.in",
     "vacancyquick.com",
     "foundthejob.com",
     "jobphobia.com",
@@ -99,7 +100,11 @@ JOB_BLOGS = [
     "jobnotification.in",
     "careerwill.com",
     "rojgaralert.com",
-    "sarkariwallahjob.com"
+    "sarkariwallahjob.com",
+    "freshersjobsaadda.blogspot.com",
+    "foundit.in",          # affiliate redirect — never direct
+    "tinyurl.com",
+    "bit.ly"
 ]
 
 BAD_LINK_PATTERNS = [
@@ -206,12 +211,28 @@ def clean_text(text):
     return result.strip()
 
 
+# Apply button text patterns — case insensitive
+APPLY_TEXTS = [
+    "apply now", "apply here", "apply online",
+    "click here to apply", "official link", "apply link",
+    "official website", "direct link", "apply directly",
+    "click to apply", "application link", "register now",
+    "apply for this job", "apply for this role"
+]
+
 def scrape_apply_link_from_blog(url):
     try:
-        r = requests.get(url, timeout=8, headers=HEADERS, allow_redirects=True)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        r = requests.get(url, timeout=10, headers=headers, allow_redirects=True)
         if not r.ok:
+            print(f"  Fetch failed {r.status_code}: {url}")
             return url
 
+        # Check if redirect already landed on a good/best domain
         final_url = r.url
         if is_best_domain(final_url):
             return final_url
@@ -219,58 +240,117 @@ def scrape_apply_link_from_blog(url):
             return final_url
 
         soup = BeautifulSoup(r.text, "html.parser")
+        source_domain = re.search(r'https?://([^/]+)', url)
+        source_host = source_domain.group(1) if source_domain else ""
 
+        # ── PASS 1: Best domain (ATS systems) ────────────────
         for a in soup.find_all("a", href=True):
-            href = a["href"]
+            href = a["href"].strip()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href):
+            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
                 continue
             if is_best_domain(href):
+                print(f"  Found BEST domain: {href[:80]}")
                 return href
+
+        # ── PASS 2: Good domain (Naukri, LinkedIn, etc.) ─────
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                continue
+            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+                continue
             if is_good_domain(href):
+                print(f"  Found GOOD domain: {href[:80]}")
                 return href
 
+        # ── PASS 3: Apply button text match ──────────────────
         for a in soup.find_all("a", href=True):
-            href = a["href"]
-            text = a.get_text().lower().strip()
+            href = a["href"].strip()
+            text = a.get_text(" ", strip=True).lower()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href):
+            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
                 continue
-            if is_job_blog(href):
-                continue
-            if any(kw in text for kw in ["apply now", "apply here", "apply online", "click here to apply", "official link", "apply link", "official website"]):
+            # Also check aria-label and title attributes
+            aria = (a.get("aria-label") or "").lower()
+            title_attr = (a.get("title") or "").lower()
+            combined = text + " " + aria + " " + title_attr
+            if any(kw in combined for kw in APPLY_TEXTS):
+                print(f"  Found via apply text: {href[:80]}")
                 return href
 
-        blog_domain_match = re.search(r'https?://([^/]+)', url)
+        # ── PASS 4: CSS class hints (apply-btn, btn-apply, etc.) ─
         for a in soup.find_all("a", href=True):
-            href = a["href"]
+            href = a["href"].strip()
+            classes = " ".join(a.get("class") or []).lower()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href):
+            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
                 continue
-            if is_job_blog(href):
-                continue
-            link_domain_match = re.search(r'https?://([^/]+)', href)
-            if blog_domain_match and link_domain_match:
-                if blog_domain_match.group(1) != link_domain_match.group(1):
+            if any(kw in classes for kw in ["apply", "btn-primary", "cta", "apply-btn", "job-apply"]):
+                link_host = re.search(r'https?://([^/]+)', href)
+                if link_host and link_host.group(1) != source_host:
+                    print(f"  Found via CSS class: {href[:80]}")
                     return href
 
+        # ── PASS 5: First external link not from same domain ─
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                continue
+            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+                continue
+            link_host = re.search(r'https?://([^/]+)', href)
+            if link_host and link_host.group(1) != source_host:
+                print(f"  Found external fallback: {href[:80]}")
+                return href
+
+        print(f"  No direct link found, returning original: {url[:80]}")
         return url
 
     except Exception as e:
-        print(f"Blog scrape error: {e}")
+        print(f"Blog scrape error for {url[:60]}: {e}")
         return url
+
+
+# Strips emojis and markdown formatting from a line
+def strip_line(line):
+    # Remove markdown bold/italic/code
+    line = re.sub(r'[*_`]', '', line)
+    # Remove emojis by encoding to ASCII ignoring non-ASCII chars
+    # Then decode back — keeps letters, numbers, punctuation
+    line = line.encode('ascii', 'ignore').decode('ascii')
+    return line.strip()
 
 
 def extract_fields(text):
     lines = text.split("\n")
     company = role = location = salary = last_date = ""
+    qualification = experience = batch = ""
+
+    # Try to extract company + role from headline (first line)
+    # e.g. "HCLTech Off Campus 2026 Hiring Freshers – Associate IT Engineer"
+    first_line = strip_line(lines[0]).strip() if lines else ""
+    headline_match = re.search(
+        r'([A-Z][a-zA-Z0-9& ]+?)\s+(?:off campus|hiring|recruitment|internship|walk.?in)',
+        first_line, re.IGNORECASE
+    )
+    if headline_match and not company:
+        company = headline_match.group(1).strip()
+
+    # Role from headline: text after last dash/em dash
+    dash_split = re.split(r'[–—\-]{1,2}', first_line)
+    if len(dash_split) > 1 and not role:
+        candidate = dash_split[-1].strip()
+        if len(candidate) > 5 and not candidate.startswith("http"):
+            role = candidate
 
     for line in lines:
-        l = line.lower().strip()
-        clean = re.sub(r'[*_]', '', line).strip()
+        l = strip_line(line).lower().strip()
+        clean = strip_line(line).strip()
+        # Value is everything after the first colon
         value = clean.split(":", 1)[-1].strip() if ":" in clean else ""
 
         if value.startswith("http") or value.startswith("//"):
@@ -278,37 +358,59 @@ def extract_fields(text):
         if not value or len(value) < 2:
             continue
 
+        # Company
         if not company:
             if any(w in l for w in ["company", "organisation", "organization", "employer"]):
                 company = value
-            elif re.search(r'([A-Z][a-zA-Z ]+ ?(Technologies|Solutions|Systems|Services|India|Ltd|Pvt|Inc|Corp|Group|Data|Global))', line):
-                m = re.search(r'([A-Z][a-zA-Z ]+ ?(Technologies|Solutions|Systems|Services|India|Ltd|Pvt|Inc|Corp|Group|Data|Global))', line)
+            elif re.search(r'([A-Z][a-zA-Z0-9& ]+ ?(Technologies|Solutions|Systems|Services|India|Ltd|Pvt|Inc|Corp|Group|Data|Global|Tech))', clean):
+                m = re.search(r'([A-Z][a-zA-Z0-9& ]+ ?(Technologies|Solutions|Systems|Services|India|Ltd|Pvt|Inc|Corp|Group|Data|Global|Tech))', clean)
                 if m:
                     company = m.group(0).strip()
             elif "is hiring" in l:
                 company = clean.split("is hiring")[0].strip()
 
+        # Role
         if not role:
             if any(w in l for w in ["role", "position", "title", "post", "designation", "hiring for", "job title"]):
                 role = value
 
+        # Location
         if not location:
             if any(w in l for w in ["location", "place", "city", "venue", "work location"]):
                 location = value
 
+        # Salary / CTC
         if not salary:
             if any(w in l for w in ["salary", "ctc", "lpa", "per annum", "stipend", "package"]):
                 salary = value
 
+        # Qualification / Education
+        if not qualification:
+            if any(w in l for w in ["qualification", "eligibility", "education", "degree", "graduates"]):
+                qualification = value
+
+        # Experience
+        if not experience:
+            if any(w in l for w in ["experience", "exp", "work experience"]):
+                # Make sure it's not a salary line
+                if not any(w in l for w in ["salary", "ctc", "lpa"]):
+                    experience = value
+
+        # Batch year
+        if not batch:
+            if "batch" in l or re.search(r'\b20(2[3-9]|3[0-9])\b.*\b20(2[3-9]|3[0-9])\b', value):
+                batch = value
+
+        # Last date
         if not last_date:
             if any(w in l for w in ["last date", "apply before", "deadline", "apply by", "closing date"]):
                 last_date = value
 
-    return company, role, location, salary, last_date
+    return company, role, location, salary, qualification, experience, batch, last_date
 
 
 def format_message(cleaned_text, apply_link):
-    company, role, location, salary, last_date = extract_fields(cleaned_text)
+    company, role, location, salary, qualification, experience, batch, last_date = extract_fields(cleaned_text)
 
     msg = ""
     if company:
@@ -319,10 +421,17 @@ def format_message(cleaned_text, apply_link):
         msg += f"📍 *Location:* {location}\n"
     if salary:
         msg += f"💰 *Salary:* {salary}\n"
+    if qualification:
+        msg += f"🎓 *Qualification:* {qualification}\n"
+    if experience:
+        msg += f"💼 *Experience:* {experience}\n"
+    if batch:
+        msg += f"🥇 *Batch:* {batch}\n"
     if last_date:
         msg += f"⏳ *Last Date:* {last_date}\n"
 
-    if not any([company, role, location, salary, last_date]):
+    # If nothing extracted at all, fall back to cleaned text
+    if not any([company, role, location, salary, qualification, experience, batch, last_date]):
         msg += cleaned_text + "\n"
 
     msg += f"\n━━━━━━━━━━━━━━━\n"
@@ -425,3 +534,4 @@ async def main():
 with client:
     client.start()
     asyncio.get_event_loop().run_until_complete(main())
+
