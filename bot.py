@@ -104,7 +104,8 @@ JOB_BLOGS = [
     "freshersjobsaadda.blogspot.com",
     "foundit.in",          # affiliate redirect — never direct
     "tinyurl.com",
-    "bit.ly"
+    "bit.ly",
+    "freshersdunia.in"
 ]
 
 BAD_LINK_PATTERNS = [
