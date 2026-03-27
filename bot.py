@@ -122,7 +122,21 @@ BAD_LINK_PATTERNS = [
     "x.com/",
     "play.google.com",
     "addtoany.com",
-    "sharethis.com"
+    "sharethis.com",
+    # Email disguised as URL
+    "@gmail.com",
+    "@yahoo.com",
+    "@hotmail.com",
+    "@outlook.com",
+    # Spam / non-job sites
+    "getrevue.co",
+    "tinyurl.com",
+    "bit.ly",
+    "forms.gle",       # Google Forms = usually spam course registration
+    "linktr.ee",
+    # Wildcard / broken links
+    "/**",
+    "/*"
 ]
 
 JOB_KEYWORDS = [
@@ -172,7 +186,21 @@ def is_skip_url(url):
 
 def is_bad_link(url):
     url_lower = url.lower()
-    return any(bad in url_lower for bad in BAD_LINK_PATTERNS)
+    # Check pattern list
+    if any(bad in url_lower for bad in BAD_LINK_PATTERNS):
+        return True
+    # Block email-as-URLs (contain @)
+    if "@" in url:
+        return True
+    # Block URLs ending with wildcard patterns
+    if url.rstrip("/").endswith("**") or url.rstrip("/").endswith("*"):
+        return True
+    # Block academic / personal pages that are not job portals
+    academic_patterns = [".ac.in/", ".edu/", "blogger.com", "blogspot.com",
+                         "getrevue.co", "substack.com"]
+    if any(p in url_lower for p in academic_patterns):
+        return True
+    return False
 
 
 def is_best_domain(url):
@@ -221,26 +249,32 @@ APPLY_TEXTS = [
 ]
 
 def scrape_apply_link_from_blog(url):
+    # Clean up wildcard/broken URLs from fresheroffcampus etc.
+    # e.g. https://www.fresheroffcampus.com/hcltech-off-campus/** -> remove /**
+    clean_url = re.sub(r'/\*+$', '', url).rstrip("/")
+    if is_bad_link(clean_url) or not clean_url.startswith("http"):
+        return None  # Return None so caller skips it
+
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
         }
-        r = requests.get(url, timeout=10, headers=headers, allow_redirects=True)
+        r = requests.get(clean_url, timeout=10, headers=headers, allow_redirects=True)
         if not r.ok:
-            print(f"  Fetch failed {r.status_code}: {url}")
-            return url
+            print(f"  Fetch failed {r.status_code}: {clean_url}")
+            return None  # Page doesn't exist, skip
 
         # Check if redirect already landed on a good/best domain
         final_url = r.url
-        if is_best_domain(final_url):
+        if is_best_domain(final_url) and not is_job_blog(final_url):
             return final_url
-        if is_good_domain(final_url):
+        if is_good_domain(final_url) and not is_job_blog(final_url):
             return final_url
 
         soup = BeautifulSoup(r.text, "html.parser")
-        source_domain = re.search(r'https?://([^/]+)', url)
+        source_domain = re.search(r'https?://([^/]+)', clean_url)
         source_host = source_domain.group(1) if source_domain else ""
 
         # ── PASS 1: Best domain (ATS systems) ────────────────
@@ -248,7 +282,7 @@ def scrape_apply_link_from_blog(url):
             href = a["href"].strip()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+            if is_bad_link(href) or is_job_blog(href):
                 continue
             if is_best_domain(href):
                 print(f"  Found BEST domain: {href[:80]}")
@@ -259,7 +293,7 @@ def scrape_apply_link_from_blog(url):
             href = a["href"].strip()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+            if is_bad_link(href) or is_job_blog(href):
                 continue
             if is_good_domain(href):
                 print(f"  Found GOOD domain: {href[:80]}")
@@ -271,9 +305,8 @@ def scrape_apply_link_from_blog(url):
             text = a.get_text(" ", strip=True).lower()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+            if is_bad_link(href) or is_job_blog(href):
                 continue
-            # Also check aria-label and title attributes
             aria = (a.get("aria-label") or "").lower()
             title_attr = (a.get("title") or "").lower()
             combined = text + " " + aria + " " + title_attr
@@ -281,13 +314,13 @@ def scrape_apply_link_from_blog(url):
                 print(f"  Found via apply text: {href[:80]}")
                 return href
 
-        # ── PASS 4: CSS class hints (apply-btn, btn-apply, etc.) ─
+        # ── PASS 4: CSS class hints ────────────────────────
         for a in soup.find_all("a", href=True):
             href = a["href"].strip()
             classes = " ".join(a.get("class") or []).lower()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+            if is_bad_link(href) or is_job_blog(href):
                 continue
             if any(kw in classes for kw in ["apply", "btn-primary", "cta", "apply-btn", "job-apply"]):
                 link_host = re.search(r'https?://([^/]+)', href)
@@ -295,24 +328,24 @@ def scrape_apply_link_from_blog(url):
                     print(f"  Found via CSS class: {href[:80]}")
                     return href
 
-        # ── PASS 5: First external link not from same domain ─
+        # ── PASS 5: First external link not from same domain ───
         for a in soup.find_all("a", href=True):
             href = a["href"].strip()
             if not href.startswith("http"):
                 continue
-            if is_skip_url(href) or is_bad_link(href) or is_job_blog(href):
+            if is_bad_link(href) or is_job_blog(href):
                 continue
             link_host = re.search(r'https?://([^/]+)', href)
             if link_host and link_host.group(1) != source_host:
                 print(f"  Found external fallback: {href[:80]}")
                 return href
 
-        print(f"  No direct link found, returning original: {url[:80]}")
-        return url
+        print(f"  No direct link found for: {clean_url[:80]}")
+        return None  # Return None — better to skip than post a blog link
 
     except Exception as e:
-        print(f"Blog scrape error for {url[:60]}: {e}")
-        return url
+        print(f"Blog scrape error for {clean_url[:60]}: {e}")
+        return None
 
 
 # Strips emojis and markdown formatting from a line
@@ -412,6 +445,13 @@ def extract_fields(text):
 def format_message(cleaned_text, apply_link):
     company, role, location, salary, qualification, experience, batch, last_date = extract_fields(cleaned_text)
 
+    # Skip useless messages that have only company name and nothing else
+    # e.g. "🏢 Company: HCL Tech" with no role/location/salary
+    useful_fields = [role, location, salary, qualification, experience]
+    if not any(useful_fields):
+        print(f"Skipped: only company extracted, no useful fields — {company or 'unknown'}")
+        return None
+
     msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
@@ -460,18 +500,18 @@ def process_message(text):
     # Collect ALL links — one per job
     final_links = []
     for url in valid_urls:
-        if is_best_domain(url):
+        if is_best_domain(url) and not is_job_blog(url):
             final_links.append(url)
-        elif is_good_domain(url):
+        elif is_good_domain(url) and not is_job_blog(url):
             final_links.append(url)
-        elif is_job_blog(url):
+        elif is_job_blog(url) or not (is_best_domain(url) or is_good_domain(url)):
             scraped = scrape_apply_link_from_blog(url)
-            if scraped:
-                final_links.append(scraped)
-        else:
-            scraped = scrape_apply_link_from_blog(url)
-            if scraped:
-                final_links.append(scraped)
+            if scraped:  # None means skip
+                # Only add if it's not a blog/bad link itself
+                if not is_job_blog(scraped) and not is_bad_link(scraped):
+                    final_links.append(scraped)
+                else:
+                    print(f"  Scraped link still a blog/bad: {scraped[:60]} — skipped")
 
     if not final_links:
         print("Skipped: no apply link found")
