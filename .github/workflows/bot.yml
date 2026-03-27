@@ -1,7 +1,7 @@
 name: Run Bot
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 jobs:
   run:
@@ -29,3 +29,4 @@ jobs:
           git add -f sent_ids.txt
           git commit -m "update ids" || echo "no change"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main --force
+
