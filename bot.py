@@ -138,7 +138,7 @@ BAD_LINK_PATTERNS = [
     "linktr.ee",
     # Wildcard / broken links
     "/**",
-    "/*".
+    "/*",
     "linkedin.com/in/",
     "linkedin.com/jobs/jobs-in",
     "linkedin.com/jobs/search",
