@@ -402,7 +402,9 @@ def extract_fields(text):
                 if m:
                     company = m.group(0).strip()
             elif "is hiring" in l:
-                company = clean.split("is hiring")[0].strip()
+                company = strip_line(clean.split("is hiring")[0]).strip()
+                # Remove trailing "is" if present
+                company = re.sub(r'\s+is\s*$', '', company, flags=re.IGNORECASE).strip()
 
         # Role
         if not role:
@@ -457,8 +459,8 @@ def format_message(cleaned_text, apply_link):
     msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
-    if company and not role:
-        role = company + " Job Opening"
+   if not role and company:
+        role = "Job Opening"
     if role:
         msg += f"💼 *Role:* {role}\n"
     if role:
