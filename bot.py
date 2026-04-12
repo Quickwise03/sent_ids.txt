@@ -457,7 +457,7 @@ def format_message(cleaned_text, apply_link):
         return None
 
       
-  msg = ""
+    msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
     if not role and company:
