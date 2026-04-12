@@ -138,7 +138,15 @@ BAD_LINK_PATTERNS = [
     "linktr.ee",
     # Wildcard / broken links
     "/**",
-    "/*"
+    "/*".
+    "linkedin.com/in/",
+    "linkedin.com/jobs/jobs-in",
+    "linkedin.com/jobs/search",
+    "trk=public_profile",
+    "currentJobId",
+    "Long Distance",
+    "Bus & Rail"
+    
 ]
 
 JOB_KEYWORDS = [
@@ -330,12 +338,16 @@ def scrape_apply_link_from_blog(url):
                     print(f"  Found via CSS class: {href[:80]}")
                     return href
 
-        # ── PASS 5: First external link not from same domain ───
+       # ── PASS 5: First external link not from same domain ───
         for a in soup.find_all("a", href=True):
             href = a["href"].strip()
+            text = a.get_text(" ", strip=True)
             if not href.startswith("http"):
                 continue
             if is_bad_link(href) or is_job_blog(href):
+                continue
+            # Skip ad links
+            if any(w in text.lower() for w in ["bus", "rail", "travel", "hotel", "tour", "book", "flight"]):
                 continue
             link_host = re.search(r'https?://([^/]+)', href)
             if link_host and link_host.group(1) != source_host:
@@ -392,7 +404,9 @@ def extract_fields(text):
             continue
         if not value or len(value) < 2:
             continue
-
+        # Skip batch/date lines for company extraction
+        if any(w in l for w in ["batch", "last date", "deadline", "apply before"]):
+            continue
         # Company
         if not company:
             if any(w in l for w in ["company", "organisation", "organization", "employer"]):
@@ -460,8 +474,6 @@ def format_message(cleaned_text, apply_link):
     msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
-    if not role and company:
-        role = "Job Opening"
     if role:
         msg += f"💼 *Role:* {role}\n"
     if location:
