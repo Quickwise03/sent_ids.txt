@@ -450,13 +450,17 @@ def format_message(cleaned_text, apply_link):
     # Skip useless messages that have only company name and nothing else
     # e.g. "🏢 Company: HCL Tech" with no role/location/salary
     useful_fields = [role, location, salary, qualification, experience]
-    if not any(useful_fields):
-        print(f"Skipped: only company extracted, no useful fields — {company or 'unknown'}")
+    if not company and not role:
+        print(f"Skipped: no company or role — skipping")
         return None
 
     msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
+    if company and not role:
+        role = company + " Job Opening"
+    if role:
+        msg += f"💼 *Role:* {role}\n"
     if role:
         msg += f"💼 *Role:* {role}\n"
     if location:
