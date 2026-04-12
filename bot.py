@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+ from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 import os
@@ -456,15 +456,14 @@ def format_message(cleaned_text, apply_link):
         print(f"Skipped: no company or role — skipping")
         return None
 
-    msg = ""
+      
+  msg = ""
     if company:
         msg += f"🏢 *Company:* {company}\n"
-   if not role and company:
+    if not role and company:
         role = "Job Opening"
     if role:
         msg += f"💼 *Role:* {role}\n"
-   
-
     if location:
         msg += f"📍 *Location:* {location}\n"
     if salary:
