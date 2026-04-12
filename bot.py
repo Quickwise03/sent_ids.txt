@@ -463,8 +463,8 @@ def format_message(cleaned_text, apply_link):
         role = "Job Opening"
     if role:
         msg += f"💼 *Role:* {role}\n"
-    if role:
-        msg += f"💼 *Role:* {role}\n"
+   
+
     if location:
         msg += f"📍 *Location:* {location}\n"
     if salary:
