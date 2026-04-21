@@ -26,7 +26,7 @@ jobs:
           rm -f *.session
           rm -f *.session-journal
           git checkout -- .
-          git add -f sent_ids.txt
+          git add -f sent_ids.txt sent_urls.txt
           git commit -m "update ids" || echo "no change"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main --force
 
