@@ -185,6 +185,27 @@ def save_ids(ids):
         f.write("\n".join(ids))
 
 
+def load_sent_urls():
+    try:
+        with open("sent_urls.txt", "r") as f:
+            return set(f.read().splitlines())
+    except:
+        return set()
+
+
+def save_sent_urls(urls):
+    with open("sent_urls.txt", "w") as f:
+        f.write("\n".join(urls))
+
+
+def normalize_url(url):
+    """Strip tracking params so same job URL from different sources matches."""
+    url = url.rstrip("/")
+    url = re.sub(r'[?&](utm_[^&]*|ref=[^&]*|src=[^&]*|gh_src=[^&]*)', '', url)
+    url = re.sub(r'[?&]$', '', url)
+    return url.lower()
+
+
 def extract_urls(text):
     return re.findall(r'https?://[^\s\)\]\,\"\']+', text)
 
@@ -550,6 +571,8 @@ def process_message(text):
 async def main():
     sent_ids = load_ids()
     new_ids = set(sent_ids)
+    sent_urls = load_sent_urls()
+    new_sent_urls = set(sent_urls)
 
     since = datetime.now(timezone.utc) - timedelta(hours=24)
 
@@ -574,12 +597,28 @@ async def main():
                 # Handle both single and multiple messages
                 if isinstance(result, list):
                     for r in result:
+                        # Extract apply link from formatted message to check dupe
+                        link_match = re.search(r'https?://\S+', r.split("Apply Here:")[-1])
+                        apply_url = normalize_url(link_match.group(0)) if link_match else None
+                        if apply_url and apply_url in new_sent_urls:
+                            print(f"Skipped duplicate URL: {apply_url[:60]}")
+                            continue
                         print("Sending:", r[:60])
                         await client.send_message(DEST_CHANNEL, r, parse_mode="md")
+                        if apply_url:
+                            new_sent_urls.add(apply_url)
                         await asyncio.sleep(1)
                 else:
+                    link_match = re.search(r'https?://\S+', result.split("Apply Here:")[-1])
+                    apply_url = normalize_url(link_match.group(0)) if link_match else None
+                    if apply_url and apply_url in new_sent_urls:
+                        print(f"Skipped duplicate URL: {apply_url[:60]}")
+                        new_ids.add(msg_id)
+                        continue
                     print("Sending:", result[:60])
                     await client.send_message(DEST_CHANNEL, result, parse_mode="md")
+                    if apply_url:
+                        new_sent_urls.add(apply_url)
 
                 new_ids.add(msg_id)
                 await asyncio.sleep(1)
@@ -588,6 +627,7 @@ async def main():
             print(f"Error in channel {channel}: {e}")
 
     save_ids(new_ids)
+    save_sent_urls(new_sent_urls)
 
 
 with client:
