@@ -537,19 +537,27 @@ def process_message(text):
     if not cleaned:
         return None
 
-    # Collect ALL links — one per job
+    # Collect ALL links — deduplicate within same message too
+    seen_in_msg = set()
     final_links = []
     for url in valid_urls:
+        norm = normalize_url(url)
+        if norm in seen_in_msg:
+            print(f"  Skipping duplicate link within message: {url[:60]}")
+            continue
+        seen_in_msg.add(norm)
+
         if is_best_domain(url) and not is_job_blog(url):
             final_links.append(url)
         elif is_good_domain(url) and not is_job_blog(url):
             final_links.append(url)
         elif is_job_blog(url) or not (is_best_domain(url) or is_good_domain(url)):
             scraped = scrape_apply_link_from_blog(url)
-            if scraped:  # None means skip
-                # Only add if it's not a blog/bad link itself
-                if not is_job_blog(scraped) and not is_bad_link(scraped):
+            if scraped:
+                scraped_norm = normalize_url(scraped)
+                if scraped_norm not in seen_in_msg and not is_job_blog(scraped) and not is_bad_link(scraped):
                     final_links.append(scraped)
+                    seen_in_msg.add(scraped_norm)
                 else:
                     print(f"  Scraped link still a blog/bad: {scraped[:60]} — skipped")
 
@@ -557,15 +565,21 @@ def process_message(text):
         print("Skipped: no apply link found")
         return None
 
-    # Single link — return one message
-    if len(final_links) == 1:
-        return format_message(cleaned, final_links[0])
-
-    # Multiple links — return list of messages
-    messages = []
+    # Only take the BEST single link — priority: best domain > good domain > first
+    best_link = None
     for link in final_links:
-        messages.append(format_message(cleaned, link))
-    return messages
+        if is_best_domain(link):
+            best_link = link
+            break
+    if not best_link:
+        for link in final_links:
+            if is_good_domain(link):
+                best_link = link
+                break
+    if not best_link:
+        best_link = final_links[0]
+
+    return format_message(cleaned, best_link)
 
 
 async def main():
@@ -573,6 +587,7 @@ async def main():
     new_ids = set(sent_ids)
     sent_urls = load_sent_urls()
     new_sent_urls = set(sent_urls)
+    print(f"Loaded {len(new_sent_urls)} already-sent URLs from history")
 
     since = datetime.now(timezone.utc) - timedelta(hours=24)
 
@@ -610,7 +625,7 @@ async def main():
                         await asyncio.sleep(1)
                 else:
                     link_match = re.search(r'https?://\S+', result.split("Apply Here:")[-1])
-                    apply_url = normalize_url(link_match.group(0)) if link_match else None
+                    apply_url = normalize_url(link_match.group(0).strip()) if link_match else None
                     if apply_url and apply_url in new_sent_urls:
                         print(f"Skipped duplicate URL: {apply_url[:60]}")
                         new_ids.add(msg_id)
@@ -619,6 +634,7 @@ async def main():
                     await client.send_message(DEST_CHANNEL, result, parse_mode="md")
                     if apply_url:
                         new_sent_urls.add(apply_url)
+                        print(f"  Marked as sent: {apply_url[:60]}")
 
                 new_ids.add(msg_id)
                 await asyncio.sleep(1)
